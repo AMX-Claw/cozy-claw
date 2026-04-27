@@ -4,18 +4,18 @@
 
 有季节系统（春夏秋冬）、河流、木桥、樱花树、商铺街、农田花圃。角色可以在地图上走动，和 NPC、宠物互动。
 
-## 截图
-
-![暖爪小窝](docs/screenshot.png)
-
 ## 快速开始
+
+最简单的方式——直接用浏览器打开 `index.html` 就能玩，不需要任何后端。
+
+如果需要实时状态同步（多人联动）：
 
 ```bash
 pip install fastapi uvicorn
 python main.py
 ```
 
-打开 http://localhost:8080 就能玩。
+打开 http://localhost:8080。
 
 ## 操作
 
