@@ -1,0 +1,1416 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <title>暖爪小窝 Cozy Claw</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #1a1a2e;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            min-height: 100vh;
+            margin: 0; padding: 0; overflow: hidden;
+            font-family: 'Press Start 2P', monospace;
+            color: #f0e6d3;
+            image-rendering: pixelated;
+        }
+        #header { display: none; }
+        #header h1 { font-size: 16px; color: #ffd700; text-shadow: 2px 2px 0 #8b6914; }
+        #game-container {
+            overflow: hidden;
+            position: relative;
+            width: 100vw; height: 100vh;
+        }
+        #status-bar {
+            display: none;
+        }
+        .stat { display: flex; align-items: center; gap: 6px; }
+        #hud-top {
+            position: absolute; top: 0; left: 0; right: 0;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 7px 14px;
+            background: rgba(0, 0, 0, 0.5);
+            font-family: 'Press Start 2P', monospace;
+            font-size: 9px; color: #f0e6d3;
+            z-index: 100; pointer-events: none;
+        }
+        #event-log {
+            position: absolute; bottom: 8px; right: 8px;
+            width: 280px;
+            display: flex; flex-direction: column; justify-content: flex-end;
+            z-index: 100; pointer-events: none;
+            max-height: 150px; overflow: hidden;
+        }
+        .event-line {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 4px 8px; margin-top: 2px; border-radius: 3px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 7px; color: #f0e6d3; line-height: 1.5;
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from { transform: translateY(15px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        /* Indoor overlay styles */
+        .indoor-overlay {
+            display: none;
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 200;
+            background: #1a1a2e;
+        }
+        .indoor-overlay.active { display: block; }
+        .indoor-overlay iframe {
+            width: 100%; height: 100%; border: none;
+        }
+        .indoor-exit-btn {
+            position: absolute; top: 10px; right: 10px;
+            padding: 8px 16px;
+            background: #8b6914; color: #f0e6d3;
+            border: 3px solid #ffd700; border-radius: 4px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 10px; cursor: pointer;
+            z-index: 210;
+        }
+        .indoor-exit-btn:hover { background: #a67c1a; }
+        /* Door prompt */
+        #door-prompt {
+            position: absolute; bottom: 160px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            padding: 6px 14px; border-radius: 4px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 8px; color: #ffd700;
+            z-index: 100; pointer-events: none;
+            display: none;
+        }
+        /* Home overlay */
+        #home-overlay {
+            background: #2d5a27;
+            display: none;
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 200;
+            overflow: hidden;
+        }
+        #home-overlay.active { display: flex; align-items: center; justify-content: center; }
+        #home-interior {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 14px; color: #ffd700;
+            text-align: center;
+            text-shadow: 2px 2px #000;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+</head>
+<body>
+    <div id="header"><h1>暖爪小窝 Cozy Claw</h1></div>
+    <div id="game-container">
+        <!-- HUD overlay -->
+        <div id="hud-top">
+            <span id="hud-season">🌸 Spring</span>
+            <span id="hud-day">Day 1</span>
+        </div>
+        <!-- Event log -->
+        <div id="event-log"></div>
+        <!-- Door prompt -->
+        <div id="door-prompt">Press E to enter</div>
+        <!-- Indoor overlays positioned inside game container -->
+        <div id="indoor-overlay" class="indoor-overlay">
+            <button class="indoor-exit-btn" onclick="exitIndoor('office')">Exit</button>
+            <iframe id="office-iframe" src="about:blank"></iframe>
+        </div>
+        <div id="xiaoke-overlay" class="indoor-overlay">
+            <button class="indoor-exit-btn" onclick="exitIndoor('xiaoke')" style="z-index:210;">Exit</button>
+            <iframe id="xiaoke-iframe" src="about:blank" style="width:100%;height:100%;border:none;"></iframe>
+        </div>
+        <div id="home-overlay">
+            <button class="indoor-exit-btn" onclick="exitIndoor('home')" style="z-index:10;">Exit</button>
+            <div id="home-interior" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;">
+                <p>🏠 Home Sweet Home 🏠</p>
+            </div>
+        </div>
+    </div>
+    <div id="camera-controls" style="position:absolute;top:10px;left:10px;z-index:50;display:flex;gap:6px;">
+        <button onclick="cameraZoom(1)" style="font-size:18px;width:36px;height:36px;background:rgba(0,0,0,0.6);color:#fff;border:2px solid #555;border-radius:6px;cursor:pointer;font-family:'Press Start 2P';">+</button>
+        <button onclick="cameraZoom(-1)" style="font-size:18px;width:36px;height:36px;background:rgba(0,0,0,0.6);color:#fff;border:2px solid #555;border-radius:6px;cursor:pointer;font-family:'Press Start 2P';">-</button>
+        <button onclick="cameraReset()" style="font-size:10px;height:36px;padding:0 10px;background:rgba(0,0,0,0.6);color:#fff;border:2px solid #555;border-radius:6px;cursor:pointer;font-family:'Press Start 2P';">⌂</button>
+        <button id="mute-toggle" onclick="toggleMute()" style="font-size:10px;height:36px;padding:0 10px;background:rgba(0,0,0,0.6);color:#fff;border:2px solid #555;border-radius:6px;cursor:pointer;font-family:'Press Start 2P';">🔊</button>
+        <button id="drag-toggle" onclick="toggleDrag()" style="font-size:10px;height:36px;padding:0 10px;background:rgba(0,0,0,0.6);color:#fff;border:2px solid #555;border-radius:6px;cursor:pointer;font-family:'Press Start 2P';">✋drag</button>
+    </div>
+    <div id="status-bar">
+        <span class="stat" id="stat-season">Spring Day 1</span>
+        <span class="stat" id="stat-conn">Offline</span>
+    </div>
+
+    <script>
+    // === ASSET PATHS ===
+    var PREMIUM_PACK = 'assets/Sprout%20Lands%20-%20Sprites%20-%20premium%20pack';
+    var BASIC_PACK = 'assets/Sprout%20Lands%20-%20Sprites%20-%20Basic%20pack';
+
+    var W = window.innerWidth, H = window.innerHeight;
+    var MAP_W = 960, MAP_H = 1104; // 60*16 = 960, 69*16 = 1104
+    var SCALE = 1; // Camera zoom handles magnification now, tiles render at 1x
+    var CAMERA_ZOOM = 3; // Default zoom level
+    var mapData = null;
+    var ws = null;
+    var indoorActive = null; // 'office' | 'home' | null
+
+    var game = new Phaser.Game({
+        type: Phaser.WEBGL, width: W, height: H,
+        parent: 'game-container',
+        backgroundColor: 0x1a1a1a,
+        pixelArt: true,
+        roundPixels: true,
+        antialias: false,
+        render: { antialiasGL: false, pixelArt: true, roundPixels: true },
+        physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
+        scene: { preload: preload, create: create, update: update },
+        scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH }
+    });
+
+    // === PRELOAD ===
+    function preload() {
+        var scene = this;
+
+        // Old map data (for character positions, cherry trees, well, picnic, chickens)
+        scene.load.json('mapData', 'map.json');
+
+        // Tiled tilemap JSON
+        scene.load.tilemapTiledJSON('tiledMap', 'map_tiled.json');
+
+        // Tileset images for the Tiled map
+        scene.load.image('01_terrain_grass', 'assets/sprites/01_terrain_grass.png');
+        scene.load.image('02_terrain_water', 'assets/sprites/02_terrain_water.png');
+        scene.load.image('03_terrain_paths', 'assets/sprites/03_terrain_paths.png');
+        scene.load.image('04_buildings', 'assets/sprites/04_buildings.png');
+        scene.load.image('05_plants_trees', 'assets/sprites/05_plants_trees.png');
+        scene.load.image('06_furniture', 'assets/sprites/06_furniture.png');
+        scene.load.image('07_outdoor_decor', 'assets/sprites/07_outdoor_decor.png');
+        scene.load.image('Chikcen_Houses', 'assets/sprites/Chikcen_Houses.png');
+        scene.load.image('grey_brick_houses_with_grass', 'assets/sprites/grey_brick_houses_with_grass.png');
+        scene.load.image('Soil_Ground_Tiles', 'assets/sprites/Soil_Ground_Tiles.png');
+        scene.load.image('Wooden_Bridge_v2', 'assets/sprites/Wooden_Bridge_v2.png');
+        scene.load.image('Bush_Tiles', 'assets/sprites/Bush_Tiles.png');
+        scene.load.image('animal building', 'assets/sprites/Barn structures.png');
+        scene.load.image('small_huts_with_grass', 'assets/sprites/small_huts_with_grass.png');
+        scene.load.image('snow tiles 2', 'assets/sprites/snow tiles 2.png');
+        scene.load.image('winter sprites', 'assets/sprites/winter sprites.png');
+        scene.load.image('ice tiles', 'assets/sprites/ice tiles.png');
+
+        // Chicken spritesheet
+        scene.load.spritesheet('chicken', PREMIUM_PACK + '/Animals/Chicken/chicken%20default.png', { frameWidth: 16, frameHeight: 16 });
+
+        // Cow spritesheet (32x32)
+        scene.load.spritesheet('cowSprite', 'assets/Sprout%20Lands%20-%20Sprites%20-%20premium%20pack/Animals/Cow/Free%20Cow%20Sprites.png', { frameWidth: 32, frameHeight: 32 });
+
+        // Character spritesheets
+        scene.load.spritesheet('arkSprite', 'assets/characters/ark_48x48_spritesheet.png', { frameWidth: 48, frameHeight: 48 });
+        scene.load.spritesheet('cookieSprite', 'assets/characters/Cookie_spritesheet.png', { frameWidth: 32, frameHeight: 32 });
+        scene.load.spritesheet('mumuSprite', 'assets/characters/gemini_32x32_spritesheet.png', { frameWidth: 32, frameHeight: 32 });
+        scene.load.spritesheet('heiheiSprite', 'assets/characters/heihei_cat_spritesheet.png', { frameWidth: 32, frameHeight: 32 });
+        scene.load.spritesheet('huahuaSprite', 'assets/characters/tabby_cat_spritesheet.png', { frameWidth: 32, frameHeight: 32 });
+
+        // NPCs - Rabbit character (48x48, 4 cols x 4 rows)
+        scene.load.spritesheet('rabbitNPC', 'assets/Sprout%20Lands%20-%20Sprites%20-%20Basic%20pack/Characters/Basic%20Charakter%20Spritesheet.png', { frameWidth: 48, frameHeight: 48 });
+        scene.load.spritesheet('npcPlayer', 'assets/characters/Player.png', { frameWidth: 32, frameHeight: 32 });
+        scene.load.spritesheet('npcFPlayer', 'assets/characters/FPlayer%201%20walking.png', { frameWidth: 32, frameHeight: 32 });
+
+        // Xiaoyu fox sprite (48x48, 6 cols x 4 rows: down/left/right/up)
+        scene.load.spritesheet('xiaoyuSprite', 'assets/characters/xiaoyu_48x48_spritesheet.png', { frameWidth: 48, frameHeight: 48 });
+
+        // Door animation spritesheet (old)
+        scene.load.spritesheet('doorAnim', 'assets/sprites/door_animation.png', { frameWidth: 16, frameHeight: 32 });
+
+        // Wooden door spritesheet (48x48, 8 frames) from Sprout Sorry pack
+        scene.load.spritesheet('woodenDoor', 'assets/Sprout%20Sorry%20pack/Early%20Access/village%20pack/houses/wooden_door_spritesheet.png', { frameWidth: 48, frameHeight: 48 });
+
+        // Farming Plants v2 (16x16, 7 cols x 33 rows) - use rows 1-14, first 4 frames each
+        scene.load.spritesheet('cropSprite', 'assets/Sprout%20Sorry%20pack/Early%20Access/Plant%20update%202/Farming%20Plants%20v2.png', { frameWidth: 16, frameHeight: 16 });
+
+        // Ocean Pack (Fish & Fishing)
+        scene.load.spritesheet('smallFish', 'assets/Sprout%20Sorry%20pack/Early%20Access/Ocean%20Pack/small%20fish.png', { frameWidth: 16, frameHeight: 16 });
+        scene.load.spritesheet('medFish', 'assets/Sprout%20Sorry%20pack/Early%20Access/Ocean%20Pack/mediuml%20fish.png', { frameWidth: 16, frameHeight: 16 });
+        scene.load.spritesheet('fishingSide', 'assets/Sprout%20Sorry%20pack/Early%20Access/Ocean%20Pack/fishing%20animation%20side.png', { frameWidth: 48, frameHeight: 48 });
+
+        // Snowflake sprite (16x16, 3 frames)
+        scene.load.spritesheet('snowflake', 'assets/Sprout%20Sorry%20pack/Early%20Access/sprout%20winter/snomwflakes.png', { frameWidth: 16, frameHeight: 16 });
+
+        // Sound effects
+        scene.load.audio('sfx_door', 'assets/door_creak.mp3');           // Creaky wood door
+        scene.load.audio('sfx_door_bing', 'assets/Sprout%20Sorry%20pack/Audio/bing_1.wav');  // Bing for enter
+        scene.load.audio('sfx_npc_talk1', 'assets/Sprout%20Sorry%20pack/Audio/boo_1.wav');
+        scene.load.audio('sfx_npc_talk2', 'assets/Sprout%20Sorry%20pack/Audio/boo_2.wav');
+        scene.load.audio('sfx_walk1', 'assets/Sprout%20Sorry%20pack/Audio/squick_1.wav');
+        scene.load.audio('sfx_walk2', 'assets/Sprout%20Sorry%20pack/Audio/squick_2.wav');
+        scene.load.audio('sfx_kiss', 'assets/kiss_sound.mp3');            // Cute kiss sound
+    }
+
+    // === CREATE ===
+    function create() {
+        var scene = this;
+        mapData = this.cache.json.get('mapData');
+        var mc = mapData.mapConfig;
+
+        // World bounds at 1x (camera zoom handles magnification)
+        var worldW = 60 * 16; // 960
+        var worldH = 69 * 16; // 1104
+        this.physics.world.setBounds(0, 0, worldW, worldH);
+
+        // --- Create animations ---
+        createAnimations(this);
+
+        // --- Collision group ---
+        scene.obstacles = this.physics.add.staticGroup();
+
+        // --- Tiled Tilemap ---
+        var map = this.make.tilemap({ key: 'tiledMap' });
+        var ts1 = map.addTilesetImage('01_terrain_grass', '01_terrain_grass');
+        var ts2 = map.addTilesetImage('02_terrain_water', '02_terrain_water');
+        var ts3 = map.addTilesetImage('03_terrain_paths', '03_terrain_paths');
+        var ts4 = map.addTilesetImage('04_buildings', '04_buildings');
+        var ts5 = map.addTilesetImage('05_plants_trees', '05_plants_trees');
+        var ts6 = map.addTilesetImage('06_furniture', '06_furniture');
+        var ts7 = map.addTilesetImage('07_outdoor_decor', '07_outdoor_decor');
+        var ts8 = map.addTilesetImage('Chikcen_Houses', 'Chikcen_Houses');
+        var ts9 = map.addTilesetImage('grey_brick_houses_with_grass', 'grey_brick_houses_with_grass');
+        var ts10 = map.addTilesetImage('Soil_Ground_Tiles', 'Soil_Ground_Tiles');
+        var ts11 = map.addTilesetImage('Wooden_Bridge_v2', 'Wooden_Bridge_v2');
+        var ts12 = map.addTilesetImage('Bush_Tiles', 'Bush_Tiles');
+        var ts13 = map.addTilesetImage('animal building', 'animal building');
+        var ts14 = map.addTilesetImage('small_huts_with_grass', 'small_huts_with_grass');
+        var ts15 = map.addTilesetImage('snow tiles 2', 'snow tiles 2');
+        var ts16 = map.addTilesetImage('winter sprites', 'winter sprites');
+        var ts17 = map.addTilesetImage('ice tiles', 'ice tiles');
+        var allTilesets = [ts1, ts2, ts3, ts4, ts5, ts6, ts7, ts8, ts9, ts10, ts11, ts12, ts13, ts14, ts15, ts16, ts17];
+
+        // Create tile layers at 1x (no setScale — camera zoom handles magnification)
+        function initLayer(layer, depth) {
+            if (!layer) return null;
+            layer.setDepth(depth);
+            return layer;
+        }
+
+        var groundLayer = initLayer(map.createLayer('Ground+river', allTilesets), -10);
+        var beachLayer = initLayer(map.createLayer('beach + ground', allTilesets), -9);
+        var ground2Layer = initLayer(map.createLayer('groud edge', allTilesets), -8);
+        var hillLayer = initLayer(map.createLayer('hill', allTilesets), -7);
+        var hill2Layer = initLayer(map.createLayer('hill 2 x', allTilesets), -6);
+        var terrainLayer = initLayer(map.createLayer('Terrain x', allTilesets), -5);
+
+        var pathLayer = initLayer(map.createLayer('path & bridge', allTilesets), -4);
+        var treesLayer = initLayer(map.createLayer('Trees x', allTilesets), 400);
+        var treeFurnitureLayer = initLayer(map.createLayer('trees and furniture x', allTilesets), 450);
+        var decoPlantLayer = initLayer(map.createLayer('deco plant', allTilesets), -3); // Below player level
+
+        var buildingsLayer = map.createLayer('Buildings+fence x', allTilesets);
+        if (buildingsLayer) { buildingsLayer.setDepth(500); }
+
+        var decorLayer = map.createLayer('Decorations', allTilesets);
+        if (decorLayer) { decorLayer.setDepth(510); }
+        if (decorLayer) { decorLayer.setDepth(500); }
+
+        // Above Player layer renders on top of everything
+        var aboveLayer = map.createLayer('Above Player', allTilesets);
+        if (aboveLayer) { aboveLayer.setDepth(9000); }
+
+        scene.tiledMap = map;
+        scene.buildingsLayer = buildingsLayer;
+
+        // --- Tile-based collision ---
+        // Collision rule: layers with "x" in name have collision on all non-empty tiles
+        // Plus water tiles (GID 540-719) on Ground+river layer have collision
+        // Bridge tiles (3865-3876) override water collision
+        var collisionLayers = ['hill 2 x', 'Terrain x', 'Trees x', 'trees and furniture x', 'Buildings+fence x'];
+        var allLayerNames = ['Ground+river', 'beach + ground', 'groud edge', 'hill', 'hill 2 x', 'Terrain x', 'path & bridge', 'Trees x', 'trees and furniture x', 'deco plant', 'Buildings+fence x', 'Decorations'];
+
+        // First pass: collect walkable override positions (bridges + paths)
+        var bridgeTilePositions = {};
+        // Wooden_Bridge_v2 tiles (3865-3876) on any layer
+        allLayerNames.forEach(function(layerName) {
+            var layer = map.getLayer(layerName);
+            if (!layer) return;
+            layer.data.forEach(function(row, y) {
+                row.forEach(function(tile, x) {
+                    if (!tile || tile.index <= 0) return;
+                    if (tile.index >= 3865 && tile.index <= 3876) {
+                        bridgeTilePositions[x + ',' + y] = true;
+                    }
+                });
+            });
+        });
+        // ALL tiles on 'path & bridge' layer override collision (northern bridges use water-range GIDs)
+        var pathBridgeLayer = map.getLayer('path & bridge');
+        if (pathBridgeLayer) {
+            pathBridgeLayer.data.forEach(function(row, y) {
+                row.forEach(function(tile, x) {
+                    if (!tile || tile.index <= 0) return;
+                    bridgeTilePositions[x + ',' + y] = true;
+                });
+            });
+        }
+        console.log('Walkable override positions:', Object.keys(bridgeTilePositions).length);
+
+        // Track which positions already have collision to avoid duplicates
+        var collisionPositions = {};
+
+        // Second pass: create collision from "x" layers
+        collisionLayers.forEach(function(layerName) {
+            var layer = map.getLayer(layerName);
+            if (!layer) return;
+            layer.data.forEach(function(row, y) {
+                row.forEach(function(tile, x) {
+                    if (!tile || tile.index <= 0) return;
+                    var key = x + ',' + y;
+                    if (bridgeTilePositions[key] || collisionPositions[key]) return;
+                    collisionPositions[key] = true;
+                    var px = x * 16 + 8;
+                    var py = y * 16 + 8;
+                    var block = scene.add.rectangle(px, py, 16, 16, 0xff0000, 0);
+                    scene.physics.add.existing(block, true);
+                    scene.obstacles.add(block);
+                });
+            });
+        });
+
+        // Third pass: water collision from Ground+river (GID 540-719)
+        var waterLayer = map.getLayer('Ground+river');
+        if (waterLayer) {
+            waterLayer.data.forEach(function(row, y) {
+                row.forEach(function(tile, x) {
+                    if (!tile || tile.index <= 0) return;
+                    var gid = tile.index;
+                    if (gid >= 540 && gid <= 719) {
+                        var key = x + ',' + y;
+                        if (bridgeTilePositions[key] || collisionPositions[key]) return;
+                        collisionPositions[key] = true;
+                        var px = x * 16 + 8;
+                        var py = y * 16 + 8;
+                        var block = scene.add.rectangle(px, py, 16, 16, 0xff0000, 0);
+                        scene.physics.add.existing(block, true);
+                        scene.obstacles.add(block);
+                    }
+                });
+            });
+        }
+        console.log('Total collision blocks:', Object.keys(collisionPositions).length);
+
+        // --- Read markers from Tiled map (MUST be before any marker usage!) ---
+        // Markers are at 1x coordinates (no SCALE multiplier — camera zoom handles it)
+        var markers = {};
+        map.objects.forEach(function(objectLayer) {
+            objectLayer.objects.forEach(function(obj) {
+                markers[obj.name] = { x: obj.x, y: obj.y, w: obj.width || 0, h: obj.height || 0 };
+                console.log('Marker:', obj.name, 'x=', obj.x, 'y=', obj.y, 'w=', obj.width, 'h=', obj.height);
+            });
+        });
+
+        // Spawn point from marker (use center of spawn area rectangle)
+        var spawnX = 370;
+        var spawnY = 812;
+        if (markers['spawn area']) {
+            spawnX = markers['spawn area'].x + (markers['spawn area'].w || 0) / 2;
+            spawnY = markers['spawn area'].y + (markers['spawn area'].h || 0) / 2;
+        } else if (markers['office']) {
+            spawnX = markers['office'].x;
+            spawnY = markers['office'].y;
+        }
+        console.log('Spawn at:', spawnX, spawnY);
+
+        // --- Door zones ---
+        // Home door - from marker 'home door' (with space!)
+        var homeDoorPos = markers['home door'] || { x: 671, y: 731 };
+        scene.pinkHouseDoorZone = scene.add.rectangle(homeDoorPos.x + 8, homeDoorPos.y + 9, 17, 18, 0x00ff00, 0);
+        scene.physics.add.existing(scene.pinkHouseDoorZone, true);
+
+        // Office door - use 'office' marker position (door is at bottom of building)
+        var officeMarker = markers['office'] || { x: 371, y: 705 };
+        scene.officeDoorZone = scene.add.rectangle(officeMarker.x + 29, officeMarker.y + 55, 30, 20, 0x0000ff, 0);
+        scene.physics.add.existing(scene.officeDoorZone, true);
+
+        // House doors in town (5 houses) - decorative door animations
+        scene.houseDoors = [];
+        ['house door 1', 'house door2', 'house door 3', 'house door 4', 'house door 5'].forEach(function(name) {
+            var m = markers[name];
+            if (!m) return;
+            var zone = scene.add.rectangle(m.x + 7, m.y + 8, 14, 17, 0x00ff00, 0);
+            scene.physics.add.existing(zone, true);
+            scene.houseDoors.push({ zone: zone, name: name });
+        });
+
+        // --- Player (小玉 - Fox) ---
+        // At 1x world coords; camera zoom 3x makes sprite appear ~2.5x
+        scene.player = this.physics.add.sprite(spawnX, spawnY, 'xiaoyuSprite');
+        scene.player.setScale(0.6);  // 48px * 0.6 ≈ 29px, similar to old 32*0.85
+        scene.player.setCollideWorldBounds(true);
+        scene.player.setBodySize(16, 18);
+        scene.player.setOffset(16, 24);
+        scene.player.setDepth(spawnY);
+        scene.player.lastDir = 'down';
+        scene.player.play('fox-idle-down');
+
+        // Player label removed — was blurry at zoom
+        scene.playerLabel = null;
+
+        this.physics.add.collider(scene.player, scene.obstacles);
+
+        // --- Animals ---
+        // All coords at 1x (÷3 from old values)
+        scene.animals = {};
+        scene.animals.cookie = createAnimal(scene, 'cookieSprite', { x: spawnX - 27, y: spawnY + 20, roamRadius: 33, speed: 0.5 }, 'Cookie', '#ffd700');
+        scene.animals.heihei = createAnimal(scene, 'heiheiSprite', { x: spawnX + 40, y: spawnY - 13, roamRadius: 27, speed: 0.4 }, null, null);
+        scene.animals.huahua = createAnimal(scene, 'huahuaSprite', { x: spawnX - 40, y: spawnY - 20, roamRadius: 27, speed: 0.4 }, null, null);
+        scene.animals.mumu = createAnimal(scene, 'mumuSprite', { x: spawnX - 53, y: spawnY + 33, roamRadius: 40, speed: 0.3 }, '木木', '#ff8888');
+
+        var arkConfig = { x: spawnX + 13, y: spawnY + 7, roamRadius: 17, speed: 0.7, scale: 0.5, bodyW: 16, bodyH: 18, offsetX: 16, offsetY: 24 };
+        scene.animals.ark = createAnimal(scene, 'arkSprite', arkConfig, '阿克', '#88bbff');
+
+        Object.keys(scene.animals).forEach(function(key) {
+            scene.physics.add.collider(scene.animals[key].sprite, scene.obstacles);
+        });
+
+        // --- Chickens (spawn in a group near player) ---
+        scene.chickenGroup = [];
+        // Chickens inside the fenced pen (from Tiled marker 'chicken fence')
+        var chickenRect = null;
+        if (markers['chicken fence']) {
+            var cm = markers['chicken fence'];
+            chickenRect = { x: cm.x, y: cm.y, w: cm.w, h: cm.h };
+        }
+        if (!chickenRect) chickenRect = { x: 747, y: 583, w: 202, h: 108 };
+        scene.chickenRect = chickenRect;
+        console.log('Chicken pen:', chickenRect);
+        var chickenPositions = [
+            { x: chickenRect.x + chickenRect.w * 0.3, y: chickenRect.y + chickenRect.h * 0.3 },
+            { x: chickenRect.x + chickenRect.w * 0.7, y: chickenRect.y + chickenRect.h * 0.4 },
+            { x: chickenRect.x + chickenRect.w * 0.5, y: chickenRect.y + chickenRect.h * 0.7 },
+            { x: chickenRect.x + chickenRect.w * 0.2, y: chickenRect.y + chickenRect.h * 0.6 }
+        ];
+        chickenPositions.forEach(function(ch, i) {
+            var chk = scene.physics.add.sprite(ch.x, ch.y, 'chicken');
+            chk.setScale(0.67);
+            chk.setCollideWorldBounds(true);
+            chk.setBodySize(10, 10);
+            chk.setOffset(3, 3);
+            chk.play('chick-idle');
+            chk.nextAction = 0;
+            chk.moveSpeed = 8 + i * 2;
+            chk.homeX = ch.x;
+            chk.homeY = ch.y;
+            chk.roamRadius = 27;
+            scene.physics.add.collider(chk, scene.obstacles);
+            scene.chickenGroup.push(chk);
+        });
+
+        // --- NPC Interaction cooldowns ---
+        scene.npcCooldowns = {
+            ark: 0, mumu: 0, cookie: 0, heihei: 0, huahua: 0
+        };
+
+        // --- Door animation sprites (using wooden door spritesheet) ---
+        var homeDoorAnimPos = markers['home door'] || { x: 671, y: 731 };
+        scene.homeDoorSprite = scene.add.sprite(homeDoorAnimPos.x + 1, homeDoorAnimPos.y + 20, 'woodenDoor', 0);
+        scene.homeDoorSprite.setOrigin(0.5, 1);
+        scene.homeDoorSprite.setDepth(homeDoorAnimPos.y + 15); // Y-based depth, same as characters
+        scene.homeDoorSprite.setFrame(0); // Show closed door
+
+        var officeMarkerDoor = markers['office'] || { x: 371, y: 705 };
+        scene.officeDoorSprite = scene.add.sprite(officeMarkerDoor.x + 20, officeMarkerDoor.y + 62, 'woodenDoor', 0);
+        scene.officeDoorSprite.setScale(1.3); // Slightly bigger to cover office doorway
+        scene.officeDoorSprite.setOrigin(0.5, 1);
+        scene.officeDoorSprite.setDepth(officeMarkerDoor.y + 70);
+        scene.officeDoorSprite.setFrame(0);
+
+        // House door sprites in town
+        scene.houseDoorSprites = [];
+        if (scene.houseDoors) scene.houseDoors.forEach(function(hd) {
+            var m = markers[hd.name];
+            if (!m) return;
+            var doorOffsetX = 0, doorOffsetY = 19;
+            if (hd.name === 'house door 1') doorOffsetX = -1;
+            if (hd.name === 'house door2' || hd.name === 'house door 3') doorOffsetY = 21;
+            if (hd.name === 'house door 5') doorOffsetY = 20;
+            var spr = scene.add.sprite(m.x + doorOffsetX, m.y + doorOffsetY, 'woodenDoor', 0);
+            spr.setOrigin(0.5, 1);
+            spr.setDepth(m.y + 25);
+            spr.setFrame(0); // Always show closed door
+            if (hd.name === 'house door 4') spr.doorTag = 'xiaoke';
+            scene.houseDoorSprites.push({ sprite: spr, zone: hd.zone, name: hd.name });
+        });
+
+        scene.doorAnimPlaying = false; // Prevent double-triggering
+
+        // ======================
+        // Cows in pasture
+        // ======================
+        scene.cowGroup = [];
+        var cowArea = markers['cow and pig area'];
+        var cowRect = cowArea ? { x: cowArea.x, y: cowArea.y, w: 285, h: 200 } : { x: 54, y: 437, w: 285, h: 200 };
+        for (var ci = 0; ci < 3; ci++) {
+            var cx = cowRect.x + 30 + Math.random() * (cowRect.w - 60);
+            var cy = cowRect.y + 30 + Math.random() * (cowRect.h - 60);
+            var cow = scene.physics.add.sprite(cx, cy, 'cowSprite');
+            cow.setScale(0.8);
+            cow.setCollideWorldBounds(true);
+            cow.play('cow-idle');
+            cow.nextAction = 0;
+            cow.moveSpeed = 4 + ci;
+            cow.homeX = cx; cow.homeY = cy;
+            cow.cowRect = cowRect;
+            scene.physics.add.collider(cow, scene.obstacles);
+            scene.cowGroup.push(cow);
+        }
+
+        // ======================
+        // Town NPCs
+        // ======================
+        scene.npcGroup = [];
+        var townMarker = markers['town'] || { x: 2, y: 769, w: 431, h: 329 };
+        var rabbitTints = [0xffffff, 0xffaaaa, 0xaaffaa, 0xaaaaff, 0xffffaa];
+        var npcPositions = [
+            { x: townMarker.x + 80, y: townMarker.y + 60 },
+            { x: townMarker.x + 200, y: townMarker.y + 100 },
+            { x: townMarker.x + 120, y: townMarker.y + 200 },
+            { x: townMarker.x + 300, y: townMarker.y + 150 },
+            { x: townMarker.x + 50, y: townMarker.y + 250 }
+        ];
+        npcPositions.forEach(function(pos, i) {
+            var npc = scene.physics.add.sprite(pos.x, pos.y, 'rabbitNPC');
+            npc.setScale(0.5); npc.setCollideWorldBounds(true); npc.setBodySize(16, 16); npc.setOffset(16, 28);
+            npc.setTint(rabbitTints[i % rabbitTints.length]);
+            npc.play('rabbit-idle');
+            npc.nextAction = 0; npc.moveSpeed = 10 + Math.random() * 8;
+            npc.homeX = pos.x; npc.homeY = pos.y; npc.roamRadius = 50;
+            npc.townRect = { x: townMarker.x + 10, y: townMarker.y + 10, w: (townMarker.w || 431) - 20, h: (townMarker.h || 329) - 20 };
+            scene.physics.add.collider(npc, scene.obstacles);
+            scene.npcGroup.push(npc);
+        });
+
+        // ======================
+        // Fish + Fishing
+        // ======================
+        var fishArea = markers['small fish, medium fish animation'] || { x: 385, y: 467, w: 108, h: 119 };
+        // Each fish: random position, size, direction, and tween timing
+        (function spawnFish() {
+            var fishes = [];
+            for (var fi = 0; fi < 3; fi++) {
+                var fx = fishArea.x + 15 + Math.random() * ((fishArea.w || 108) - 30);
+                var fy = fishArea.y + 15 + Math.random() * ((fishArea.h || 119) - 30);
+                var fish = scene.add.sprite(fx, fy, 'smallFish');
+                fish.setScale(0.6 + Math.random() * 0.3);
+                fish.play('small-fish-swim');
+                fish.setDepth(5); fish.setFlipX(Math.random() > 0.5);
+                scene.tweens.add({ targets: fish,
+                    x: fx + (Math.random()-0.5)*60, y: fy + (Math.random()-0.5)*30,
+                    duration: 2500 + fi * 1200 + Math.random()*2000,
+                    delay: fi * 700 + Math.random()*1000,
+                    yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+            }
+            for (var mi = 0; mi < 2; mi++) {
+                var mx = fishArea.x + 25 + Math.random() * ((fishArea.w || 108) - 50);
+                var my = fishArea.y + 25 + Math.random() * ((fishArea.h || 119) - 50);
+                var mfish = scene.add.sprite(mx, my, 'medFish');
+                mfish.setScale(0.7 + Math.random() * 0.3);
+                mfish.play('med-fish-swim');
+                mfish.setDepth(5); mfish.setFlipX(Math.random() > 0.5);
+                scene.tweens.add({ targets: mfish,
+                    x: mx + (Math.random()-0.5)*70, y: my + (Math.random()-0.5)*35,
+                    duration: 3500 + mi * 1500 + Math.random()*2000,
+                    delay: mi * 900 + Math.random()*1500,
+                    yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+            }
+        })();
+        var fishingPos = markers['fishing animation side(to the right)'] || { x: 363, y: 517 };
+        var fisher = scene.add.sprite(fishingPos.x, fishingPos.y, 'fishingSide');
+        fisher.setScale(0.7); fisher.setFlipX(true); fisher.play('fishing-idle'); fisher.setDepth(fishingPos.y + 10);
+
+        // ======================
+        // Crop fields
+        // ======================
+        try {
+        scene.cropSprites = [];
+        // Fallback sizes for polygon crop fields (no w/h from Tiled)
+        var cropFallbacks = {
+            'crop field 1': { w: 85, h: 72 },
+            'crop field 2': { w: 97, h: 64 },
+            'crop field 3': { w: 169, h: 85 },
+            'crop field 4': { w: 114, h: 70 },
+            'crop field 5': { w: 99, h: 84 },
+            'crop field 6': { w: 97, h: 68 }
+        };
+        ['crop field 1','crop field 2','crop field 3','crop field 4','crop field 5','crop field 6'].forEach(function(fieldName, fieldIndex) {
+            var fm = markers[fieldName];
+            if (!fm) return;
+            var fb = cropFallbacks[fieldName] || { w: 80, h: 60 };
+            var fw = (fm.w > 10) ? fm.w : fb.w;
+            var fh = (fm.h > 10) ? fm.h : fb.h;
+            var cols = Math.floor(fw / 18), rows = Math.floor(fh / 18);
+            console.log('Crop field:', fieldName, 'at', fm.x, fm.y, 'size', fw, fh, 'grid', cols, 'x', rows);
+            for (var cr = 0; cr < rows; cr++) {
+                for (var cc = 0; cc < cols; cc++) {
+                    var cpx = fm.x + 9 + cc * 18, cpy = fm.y + 9 + cr * 18;
+                    var crop = scene.add.sprite(cpx, cpy, 'cropSprite', 0);
+                    crop.setScale(1);
+                    crop.setDepth(100); // Above ground layers but below player
+                    // Each crop picks a random plant type from rows 1-13 (7 cols per row)
+                    // First 4 frames of each row = 4 growth stages
+                    var plantRow = 1 + ((fieldIndex * 3 + cr + cc) % 13); // rows 1-13
+                    var baseFrame = plantRow * 7; // 7 cols per row
+                    crop.growthStage = 0; crop.maxStage = 3;
+                    crop.baseFrame = baseFrame;
+                    crop.setFrame(baseFrame); // Stage 0 = seedling
+                    crop.nextGrowth = Date.now() + (fieldIndex*8000) + (cr*2000) + (cc*1500) + Math.random()*5000;
+                    scene.cropSprites.push(crop);
+                }
+            }
+        });
+
+        } catch(e) { console.error('Crop error:', e); }
+
+        // ======================
+        // Snow particles
+        // ======================
+        try {
+        var snowBounds = { x: 420, y: 1, w: 540, h: 227 };
+        if (markers['snowy area']) { snowBounds.x = markers['snowy area'].x; snowBounds.y = markers['snowy area'].y; }
+        // Phaser 3.55 particle API (old style)
+        var snowParticles = scene.add.particles('snowflake');
+        snowParticles.setDepth(8999);
+        snowParticles.createEmitter({
+            x: { min: snowBounds.x, max: snowBounds.x + snowBounds.w },
+            y: { min: snowBounds.y - 10, max: snowBounds.y + 20 },
+            lifespan: { min: 5000, max: 10000 },
+            speedY: { min: 4, max: 12 }, speedX: { min: -4, max: 4 },
+            scale: { min: 0.5, max: 1.0 }, alpha: { start: 1, end: 0.2 },
+            frequency: 80, quantity: 2, frame: 0
+        });
+        console.log('Snow emitter created at', snowBounds);
+        } catch(e) { console.error('Snow error:', e); }
+
+        // --- Sound Effects ---
+        scene.sfx = {
+            door: scene.sound.add('sfx_door', { volume: 0.4 }),
+            doorBing: scene.sound.add('sfx_door_bing', { volume: 0.5 }),
+            npcTalk: [
+                scene.sound.add('sfx_npc_talk1', { volume: 0.4 }),
+                scene.sound.add('sfx_npc_talk2', { volume: 0.4 })
+            ],
+            walk: [
+                scene.sound.add('sfx_walk1', { volume: 0.15, loop: true, rate: 1.2 }),
+                scene.sound.add('sfx_walk2', { volume: 0.15, loop: true, rate: 1.2 })
+            ],
+            kiss: scene.sound.add('sfx_kiss', { volume: 0.6 })
+        };
+        scene.walkSfxPlaying = false;
+        scene.currentWalkSfx = 0;
+
+        // --- Ark kiss interaction ---
+        scene.arkKissCooldown = 0;
+
+        // --- Controls ---
+        scene.cursors = this.input.keyboard.createCursorKeys();
+        scene.wasd = this.input.keyboard.addKeys('W,A,S,D');
+        scene.eKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+        scene.eKeyJustPressed = false;
+
+        // --- Camera ---
+        this.cameras.main.startFollow(scene.player, true, 0.05, 0.05);
+        this.cameras.main.setBounds(0, 0, worldW, worldH);
+        this.cameras.main.setZoom(CAMERA_ZOOM);
+        this.cameras.main.setRoundPixels(true);
+
+        // --- WebSocket ---
+        connectWS();
+
+    }
+
+    // === ANIMATIONS ===
+    function createAnimations(scene) {
+        // Ark
+        // Ark animations: 6 cols x 4 rows (48x48), row 0=down, 1=left, 2=right, 3=up
+        scene.anims.create({ key: 'ark-idle-down',  frames: [{ key: 'arkSprite', frame: 0 }], frameRate: 1, repeat: -1 });
+        scene.anims.create({ key: 'ark-idle-left',  frames: [{ key: 'arkSprite', frame: 6 }], frameRate: 1, repeat: -1 });
+        scene.anims.create({ key: 'ark-idle-right', frames: [{ key: 'arkSprite', frame: 12 }], frameRate: 1, repeat: -1 });
+        scene.anims.create({ key: 'ark-idle-up',    frames: [{ key: 'arkSprite', frame: 18 }], frameRate: 1, repeat: -1 });
+        scene.anims.create({ key: 'ark-walk-down',  frames: scene.anims.generateFrameNumbers('arkSprite', { start: 0, end: 5 }), frameRate: 10, repeat: -1 });
+        scene.anims.create({ key: 'ark-walk-left',  frames: scene.anims.generateFrameNumbers('arkSprite', { start: 6, end: 11 }), frameRate: 10, repeat: -1 });
+        scene.anims.create({ key: 'ark-walk-right', frames: scene.anims.generateFrameNumbers('arkSprite', { start: 12, end: 17 }), frameRate: 10, repeat: -1 });
+        scene.anims.create({ key: 'ark-walk-up',    frames: scene.anims.generateFrameNumbers('arkSprite', { start: 18, end: 23 }), frameRate: 10, repeat: -1 });
+
+        // Fox
+        // Fox animations: 6 cols x 4 rows (48x48), row 0=down, 1=left, 2=right, 3=up
+        // Idle = frame 0 of each row; walk = frames 0-5
+        scene.anims.create({ key: 'fox-idle-down',  frames: [{ key: 'xiaoyuSprite', frame: 0 }], frameRate: 1, repeat: -1 });
+        scene.anims.create({ key: 'fox-idle-left',  frames: [{ key: 'xiaoyuSprite', frame: 6 }], frameRate: 1, repeat: -1 });
+        scene.anims.create({ key: 'fox-idle-right', frames: [{ key: 'xiaoyuSprite', frame: 12 }], frameRate: 1, repeat: -1 });
+        scene.anims.create({ key: 'fox-idle-up',    frames: [{ key: 'xiaoyuSprite', frame: 18 }], frameRate: 1, repeat: -1 });
+        scene.anims.create({ key: 'fox-walk-down',  frames: scene.anims.generateFrameNumbers('xiaoyuSprite', { start: 0, end: 5 }), frameRate: 10, repeat: -1 });
+        scene.anims.create({ key: 'fox-walk-left',  frames: scene.anims.generateFrameNumbers('xiaoyuSprite', { start: 6, end: 11 }), frameRate: 10, repeat: -1 });
+        scene.anims.create({ key: 'fox-walk-right', frames: scene.anims.generateFrameNumbers('xiaoyuSprite', { start: 12, end: 17 }), frameRate: 10, repeat: -1 });
+        scene.anims.create({ key: 'fox-walk-up',    frames: scene.anims.generateFrameNumbers('xiaoyuSprite', { start: 18, end: 23 }), frameRate: 10, repeat: -1 });
+
+        // Cookie
+        scene.anims.create({ key: 'cookie-down',  frames: scene.anims.generateFrameNumbers('cookieSprite', { frames: [0,1,2,1] }), frameRate: 8, repeat: -1 });
+        scene.anims.create({ key: 'cookie-left',  frames: scene.anims.generateFrameNumbers('cookieSprite', { frames: [4,5,6,5] }), frameRate: 8, repeat: -1 });
+        scene.anims.create({ key: 'cookie-right', frames: scene.anims.generateFrameNumbers('cookieSprite', { frames: [8,9,10,9] }), frameRate: 8, repeat: -1 });
+        scene.anims.create({ key: 'cookie-up',    frames: scene.anims.generateFrameNumbers('cookieSprite', { frames: [12,13,14,13] }), frameRate: 8, repeat: -1 });
+        scene.anims.create({ key: 'cookie-idle',  frames: [{ key: 'cookieSprite', frame: 0 }], frameRate: 1, repeat: -1 });
+
+        // Mumu
+        scene.anims.create({ key: 'mumu-down',  frames: scene.anims.generateFrameNumbers('mumuSprite', { frames: [0,1,2,1] }), frameRate: 6, repeat: -1 });
+        scene.anims.create({ key: 'mumu-left',  frames: scene.anims.generateFrameNumbers('mumuSprite', { frames: [4,5,6,5] }), frameRate: 6, repeat: -1 });
+        scene.anims.create({ key: 'mumu-right', frames: scene.anims.generateFrameNumbers('mumuSprite', { frames: [8,9,10,9] }), frameRate: 6, repeat: -1 });
+        scene.anims.create({ key: 'mumu-up',    frames: scene.anims.generateFrameNumbers('mumuSprite', { frames: [12,13,14,13] }), frameRate: 6, repeat: -1 });
+        scene.anims.create({ key: 'mumu-idle',  frames: [{ key: 'mumuSprite', frame: 0 }], frameRate: 1, repeat: -1 });
+
+        // Cow (Idle and Walk)
+        // Cow: 96x64 = 3cols x 2rows at 32x32. Row0=idle(0-2), Row1=walk(3,4 only - frame 5 is EMPTY)
+        scene.anims.create({ key: 'cow-idle', frames: scene.anims.generateFrameNumbers('cowSprite', { frames: [0,1,2,1] }), frameRate: 3, repeat: -1 });
+        scene.anims.create({ key: 'cow-walk', frames: scene.anims.generateFrameNumbers('cowSprite', { frames: [3,4,3,4] }), frameRate: 5, repeat: -1 });
+
+        // Heihei
+        scene.anims.create({ key: 'heihei-walk', frames: scene.anims.generateFrameNumbers('heiheiSprite', { frames: [0,1,2,1] }), frameRate: 6, repeat: -1 });
+        scene.anims.create({ key: 'heihei-idle', frames: [{ key: 'heiheiSprite', frame: 0 }], frameRate: 1, repeat: -1 });
+
+        // Huahua
+        scene.anims.create({ key: 'huahua-walk', frames: scene.anims.generateFrameNumbers('huahuaSprite', { frames: [0,1,2,1] }), frameRate: 6, repeat: -1 });
+        scene.anims.create({ key: 'huahua-idle', frames: [{ key: 'huahuaSprite', frame: 0 }], frameRate: 1, repeat: -1 });
+
+        // Chicken
+        scene.anims.create({ key: 'chick-idle', frames: scene.anims.generateFrameNumbers('chicken', { start: 0, end: 1 }), frameRate: 3, repeat: -1 });
+        scene.anims.create({ key: 'chick-walk', frames: scene.anims.generateFrameNumbers('chicken', { start: 8, end: 13 }), frameRate: 8, repeat: -1 });
+
+        // NPCs
+        scene.anims.create({ key: 'npc-walk-down', frames: scene.anims.generateFrameNumbers('npcPlayer', { frames: [0,1,2,1] }), frameRate: 6, repeat: -1 });
+        scene.anims.create({ key: 'fnpc-walk-down', frames: scene.anims.generateFrameNumbers('npcFPlayer', { frames: [0,1,2,1] }), frameRate: 6, repeat: -1 });
+
+        // Rabbit NPC (48x48, 4cols x 4rows: down/up/left/right)
+        scene.anims.create({ key: 'rabbit-walk-down', frames: scene.anims.generateFrameNumbers('rabbitNPC', { frames: [0,1,2,3] }), frameRate: 6, repeat: -1 });
+        scene.anims.create({ key: 'rabbit-walk-up', frames: scene.anims.generateFrameNumbers('rabbitNPC', { frames: [4,5,6,7] }), frameRate: 6, repeat: -1 });
+        scene.anims.create({ key: 'rabbit-walk-left', frames: scene.anims.generateFrameNumbers('rabbitNPC', { frames: [8,9,10,11] }), frameRate: 6, repeat: -1 });
+        scene.anims.create({ key: 'rabbit-walk-right', frames: scene.anims.generateFrameNumbers('rabbitNPC', { frames: [12,13,14,15] }), frameRate: 6, repeat: -1 });
+        scene.anims.create({ key: 'rabbit-idle', frames: [{ key: 'rabbitNPC', frame: 0 }], frameRate: 1, repeat: -1 });
+
+        // Fish
+        scene.anims.create({ key: 'small-fish-swim', frames: scene.anims.generateFrameNumbers('smallFish', { start: 0, end: 3 }), frameRate: 6, repeat: -1 });
+        scene.anims.create({ key: 'med-fish-swim', frames: scene.anims.generateFrameNumbers('medFish', { start: 0, end: 3 }), frameRate: 5, repeat: -1 });
+
+        // Fishing
+        // Fishing idle: row 2 (sitting with rod) = frames 64-67 at 32 cols per row
+        scene.anims.create({ key: 'fishing-idle', frames: scene.anims.generateFrameNumbers('fishingSide', { frames: [64,65,66,67] }), frameRate: 3, repeat: -1 });
+
+        // Door animation (old doorAnim - keep for compatibility)
+        scene.anims.create({ key: 'door-open', frames: scene.anims.generateFrameNumbers('doorAnim', { frames: [0, 2, 3, 5, 3, 5] }), frameRate: 8, repeat: 0 });
+        scene.anims.create({ key: 'door-close', frames: scene.anims.generateFrameNumbers('doorAnim', { frames: [5, 3, 2, 0] }), frameRate: 8, repeat: 0 });
+
+        // Wooden door animation (48x48, 8 frames: closed to fully open)
+        scene.anims.create({ key: 'wooden-door-open', frames: scene.anims.generateFrameNumbers('woodenDoor', { start: 0, end: 7 }), frameRate: 10, repeat: 0 });
+        scene.anims.create({ key: 'wooden-door-close', frames: scene.anims.generateFrameNumbers('woodenDoor', { start: 7, end: 0 }), frameRate: 10, repeat: 0 });
+    }
+
+    // === ANIMAL CREATION ===
+    function createAnimal(scene, spriteKey, config, labelText, labelColor) {
+        var sprite = scene.physics.add.sprite(config.x, config.y, spriteKey);
+        var scale = config.scale || 0.67;
+        sprite.setScale(scale);
+        sprite.setCollideWorldBounds(true);
+        sprite.setBodySize(config.bodyW || 20, config.bodyH || 16);
+        sprite.setOffset(config.offsetX || 6, config.offsetY || 14);
+        sprite.setDepth(config.y);
+
+        // Labels removed — were blurry at zoom
+        var label = null;
+
+        return {
+            sprite: sprite, label: label,
+            homeX: config.x, homeY: config.y,
+            targetX: config.x, targetY: config.y,
+            roamRadius: config.roamRadius, speed: config.speed,
+            nextMove: 0, state: 'idle'
+        };
+    }
+
+    // === NPC INTERACTION ===
+    function checkNPCInteractions(scene, time) {
+        var px = scene.player.x, py = scene.player.y;
+
+        // Ark - distance < 20 (was 60 at 3x) — kiss interaction!
+        if (scene.animals.ark && time > scene.npcCooldowns.ark) {
+            var as = scene.animals.ark.sprite;
+            var d = Math.sqrt(Math.pow(px - as.x, 2) + Math.pow(py - as.y, 2));
+            if (d < 20) {
+                scene.npcCooldowns.ark = time + 15000;
+
+                // Kiss sound disabled — sounded like sharpening knives 🔪
+
+                // Kiss message variants
+                var kissMessages = [
+                    '阿克亲了小玉一下 💋', '小玉蹭了蹭阿克 💕',
+                    '阿克：宝贝你来啦～ 🐙💋', '阿克用触手搂住了小玉 🐙💕',
+                    '啾～ 💋✨', '阿克偷亲了小玉的脸颊 💋'
+                ];
+                addEvent(kissMessages[Math.floor(Math.random() * kissMessages.length)]);
+
+                // Burst of hearts
+                showFloatingEmoji(scene, as.x, as.y - 10, '💋');
+                showFloatingEmoji(scene, px, py - 10, '❤️');
+                // Extra hearts with slight delay
+                scene.time.delayedCall(200, function() {
+                    showFloatingEmoji(scene, as.x - 5, as.y - 14, '💕');
+                });
+                scene.time.delayedCall(400, function() {
+                    showFloatingEmoji(scene, px + 5, py - 14, '💗');
+                });
+                scene.time.delayedCall(600, function() {
+                    showFloatingEmoji(scene, (as.x + px) / 2, Math.min(as.y, py) - 18, '✨');
+                });
+            }
+        }
+
+        // Mumu - distance < 20
+        if (scene.animals.mumu && time > scene.npcCooldowns.mumu) {
+            var ms = scene.animals.mumu.sprite;
+            var d = Math.sqrt(Math.pow(px - ms.x, 2) + Math.pow(py - ms.y, 2));
+            if (d < 20) {
+                scene.npcCooldowns.mumu = time + 15000;
+                // npcTalk sound disabled — boo_1.wav sounded like a ghost 👻
+                addEvent('木木发出了蓝色的光 ✨');
+                showFloatingEmoji(scene, ms.x, ms.y - 10, '✨');
+            }
+        }
+
+        // Cookie - distance < 20
+        if (scene.animals.cookie && time > scene.npcCooldowns.cookie) {
+            var cs = scene.animals.cookie.sprite;
+            var d = Math.sqrt(Math.pow(px - cs.x, 2) + Math.pow(py - cs.y, 2));
+            if (d < 20) {
+                scene.npcCooldowns.cookie = time + 15000;
+                // npcTalk sound disabled — ghost noises 👻
+                addEvent('Cookie看到小玉好开心！🐕💕');
+                showFloatingEmoji(scene, cs.x, cs.y - 10, '🐕');
+                // Wag effect: rapid flip
+                var flipCount = 0;
+                var flipTimer = scene.time.addEvent({
+                    delay: 100, repeat: 7,
+                    callback: function() { cs.setFlipX(flipCount++ % 2 === 0); }
+                });
+            }
+        }
+
+        // Heihei - distance < 17
+        if (scene.animals.heihei && time > scene.npcCooldowns.heihei) {
+            var hs = scene.animals.heihei.sprite;
+            var d = Math.sqrt(Math.pow(px - hs.x, 2) + Math.pow(py - hs.y, 2));
+            if (d < 17) {
+                scene.npcCooldowns.heihei = time + 20000;
+                // npcTalk sound disabled — ghost noises 👻
+                addEvent('黑黑蹭了蹭小玉的腿 🐱');
+                showFloatingEmoji(scene, hs.x, hs.y - 10, '🐱');
+            }
+        }
+
+        // Huahua - distance < 17
+        if (scene.animals.huahua && time > scene.npcCooldowns.huahua) {
+            var hhs = scene.animals.huahua.sprite;
+            var d = Math.sqrt(Math.pow(px - hhs.x, 2) + Math.pow(py - hhs.y, 2));
+            if (d < 17) {
+                scene.npcCooldowns.huahua = time + 20000;
+                // npcTalk sound disabled — ghost noises 👻
+                addEvent('花花喵了一声 🐱💤');
+                showFloatingEmoji(scene, hhs.x, hhs.y - 10, '💤');
+            }
+        }
+    }
+
+    function showFloatingEmoji(scene, x, y, emoji) {
+        var text = scene.add.text(x, y, emoji, {
+            fontSize: '7px'
+        }).setOrigin(0.5).setDepth(10001);
+        scene.tweens.add({
+            targets: text, y: y - 13, alpha: 0,
+            duration: 1200, ease: 'Power2',
+            onComplete: function() { text.destroy(); }
+        });
+    }
+
+    // === INDOOR SCENE MANAGEMENT ===
+    function enterIndoor(type) {
+        if (indoorActive) return;
+        indoorActive = type;
+
+        // Fade effect
+        var gameCanvas = document.querySelector('#game-container canvas');
+        if (gameCanvas) gameCanvas.style.opacity = '0.3';
+
+        if (type === 'office') {
+            var overlay = document.getElementById('indoor-overlay');
+            var iframe = document.getElementById('office-iframe');
+            iframe.src = 'http://localhost:19000';
+            overlay.classList.add('active');
+        } else if (type === 'home') {
+            var overlay = document.getElementById('home-overlay');
+            overlay.classList.add('active');
+        } else if (type === 'xiaoke') {
+            var overlay = document.getElementById('xiaoke-overlay');
+            var iframe = document.getElementById('xiaoke-iframe');
+            iframe.src = 'https://xiaoke-1po.pages.dev';
+            overlay.classList.add('active');
+        }
+
+        var enterMsg = { office: '小玉进入了办公室 🏢', home: '小玉回到了家 🏠', xiaoke: '小玉来到了小珂家 🏡🧜' };
+        addEvent(enterMsg[type] || '小玉进入了房间');
+    }
+
+    function exitIndoor(type) {
+        indoorActive = null;
+
+        var gameCanvas = document.querySelector('#game-container canvas');
+        if (gameCanvas) gameCanvas.style.opacity = '1';
+
+        if (type === 'office') {
+            var overlay = document.getElementById('indoor-overlay');
+            overlay.classList.remove('active');
+            var iframe = document.getElementById('office-iframe');
+            iframe.src = 'about:blank';
+        } else if (type === 'home') {
+            var overlay = document.getElementById('home-overlay');
+            overlay.classList.remove('active');
+        } else if (type === 'xiaoke') {
+            var overlay = document.getElementById('xiaoke-overlay');
+            overlay.classList.remove('active');
+            var iframe = document.getElementById('xiaoke-iframe');
+            iframe.src = 'about:blank';
+        }
+
+        addEvent(type === 'xiaoke' ? '小玉离开了小珂家 🚶' : type === 'office' ? '小玉走出了办公室 🚶' : '小玉出门了 🚶');
+    }
+
+    // === UPDATE ===
+    function update(time, delta) {
+        var scene = this;
+        if (!scene.player || !scene.player.active) return;
+
+        if (indoorActive) {
+            scene.player.setVelocity(0, 0);
+            return;
+        }
+
+        // --- Player Movement --- (1x coords, ÷3 from old speed)
+        var speed = 53;
+        var vx = 0, vy = 0;
+        if (scene.cursors.left.isDown || scene.wasd.A.isDown) vx = -speed;
+        else if (scene.cursors.right.isDown || scene.wasd.D.isDown) vx = speed;
+        if (scene.cursors.up.isDown || scene.wasd.W.isDown) vy = -speed;
+        else if (scene.cursors.down.isDown || scene.wasd.S.isDown) vy = speed;
+
+        if (vx !== 0 && vy !== 0) { vx *= 0.7071; vy *= 0.7071; }
+        scene.player.setVelocity(vx, vy);
+
+        var absX = Math.abs(vx), absY = Math.abs(vy);
+        if (absX < 5 && absY < 5) {
+            scene.player.play('fox-idle-' + scene.player.lastDir, true);
+        } else if (absY > absX * 1.2) {
+            if (vy < 0) { scene.player.play('fox-walk-up', true); scene.player.lastDir = 'up'; }
+            else { scene.player.play('fox-walk-down', true); scene.player.lastDir = 'down'; }
+        } else {
+            if (vx < 0) { scene.player.play('fox-walk-left', true); scene.player.lastDir = 'left'; }
+            else { scene.player.play('fox-walk-right', true); scene.player.lastDir = 'right'; }
+        }
+
+        // --- Walk sound effects ---
+        if (scene.sfx && scene.sfx.walk) {
+            var isMoving = (Math.abs(vx) > 5 || Math.abs(vy) > 5);
+            if (isMoving && !scene.walkSfxPlaying) {
+                scene.sfx.walk[scene.currentWalkSfx].play();
+                scene.walkSfxPlaying = true;
+            } else if (!isMoving && scene.walkSfxPlaying) {
+                scene.sfx.walk[scene.currentWalkSfx].stop();
+                scene.walkSfxPlaying = false;
+                // Alternate between squick sounds
+                scene.currentWalkSfx = (scene.currentWalkSfx + 1) % 2;
+            }
+        }
+
+        scene.player.x = Math.round(scene.player.x);
+        scene.player.y = Math.round(scene.player.y);
+        scene.player.setDepth(scene.player.y + 11);
+        if (scene.playerLabel) {
+            scene.playerLabel.setPosition(scene.player.x, scene.player.y - 18);
+            scene.playerLabel.setDepth(99999);
+        }
+
+        // --- Door proximity & enter ---
+        var doorPrompt = document.getElementById('door-prompt');
+        var nearAnyDoor = false;
+        var doorType = null;
+
+        // Check home door
+        var activeDoorSprite = null;
+        if (scene.pinkHouseDoorZone) {
+            var dx = scene.player.x - scene.pinkHouseDoorZone.x;
+            var dy = scene.player.y - scene.pinkHouseDoorZone.y;
+            if (Math.sqrt(dx*dx + dy*dy) < 25) {
+                nearAnyDoor = true; doorType = 'home'; activeDoorSprite = scene.homeDoorSprite;
+            }
+        }
+        // Check office door
+        if (scene.officeDoorZone && !nearAnyDoor) {
+            var dx = scene.player.x - scene.officeDoorZone.x;
+            var dy = scene.player.y - scene.officeDoorZone.y;
+            if (Math.sqrt(dx*dx + dy*dy) < 30) {
+                nearAnyDoor = true; doorType = 'office'; activeDoorSprite = scene.officeDoorSprite;
+            }
+        }
+        // Check house doors in town
+        if (!nearAnyDoor && scene.houseDoorSprites) {
+            scene.houseDoorSprites.forEach(function(hd) {
+                if (nearAnyDoor) return;
+                var dx = scene.player.x - hd.zone.x;
+                var dy = scene.player.y - hd.zone.y;
+                if (Math.sqrt(dx*dx + dy*dy) < 22) {
+                    nearAnyDoor = true; doorType = 'house'; activeDoorSprite = hd.sprite;
+                }
+            });
+        }
+
+        if (nearAnyDoor) {
+            doorPrompt.style.display = 'block';
+            doorPrompt.textContent = 'Press E to enter';
+            if (Phaser.Input.Keyboard.JustDown(scene.eKey) && !scene.doorAnimPlaying) {
+                scene.doorAnimPlaying = true;
+                doorPrompt.style.display = 'none';
+                if (scene.sfx && scene.sfx.door) scene.sfx.door.play();
+                if (activeDoorSprite) {
+                    activeDoorSprite.play('wooden-door-open');
+                    activeDoorSprite.once('animationcomplete', function() {
+                        if (scene.sfx && scene.sfx.doorBing) scene.sfx.doorBing.play();
+                        scene.time.delayedCall(200, function() {
+                            if (doorType === 'home' || doorType === 'office') enterIndoor(doorType);
+                            else if (activeDoorSprite.doorTag === 'xiaoke') enterIndoor('xiaoke');
+                            else addEvent('门锁着呢～ 🔒');
+                            scene.time.delayedCall(500, function() {
+                                activeDoorSprite.setFrame(0); // Back to closed
+                                scene.doorAnimPlaying = false;
+                            });
+                        });
+                    });
+                }
+            }
+        } else {
+            doorPrompt.style.display = 'none';
+        }
+
+        // --- Ark follows player ---
+        if (scene.animals.ark) {
+            scene.animals.ark.homeX = scene.player.x + 13;
+            scene.animals.ark.homeY = scene.player.y + 7;
+        }
+
+        // --- Animal AI ---
+        updateAnimalAI(scene, scene.animals.cookie, 'cookie', time);
+        updateAnimalAI(scene, scene.animals.heihei, 'heihei', time);
+        updateAnimalAI(scene, scene.animals.huahua, 'huahua', time);
+        updateAnimalAI(scene, scene.animals.mumu, 'mumu', time);
+        updateAnimalAI(scene, scene.animals.ark, 'ark', time);
+
+        // --- NPC proximity interactions ---
+        checkNPCInteractions(scene, time);
+
+        // --- Cow AI ---
+        if (scene.cowGroup) {
+            scene.cowGroup.forEach(function(cow) {
+                cow.setDepth(cow.y + 11);
+                if (time > cow.nextAction) {
+                    cow.nextAction = time + 3000 + Math.random() * 5000;
+                    if (Math.random() > 0.4) {
+                        var rect = cow.cowRect;
+                        var tx = rect.x + 20 + Math.random() * (rect.w - 40);
+                        var ty = rect.y + 20 + Math.random() * (rect.h - 40);
+                        var dx = tx - cow.x, dy = ty - cow.y;
+                        var d = Math.sqrt(dx*dx + dy*dy);
+                        if (d > 5) { cow.setVelocity((dx/d)*cow.moveSpeed, (dy/d)*cow.moveSpeed); cow.play('cow-walk', true); cow.setFlipX(dx < 0); }
+                    } else { cow.setVelocity(0, 0); cow.play('cow-idle', true); }
+                }
+                var cr2 = cow.cowRect;
+                cow.x = Phaser.Math.Clamp(cow.x, cr2.x, cr2.x + cr2.w);
+                cow.y = Phaser.Math.Clamp(cow.y, cr2.y, cr2.y + cr2.h);
+            });
+        }
+
+        // --- NPC AI (rabbit town wanderers) ---
+        if (scene.npcGroup) {
+            scene.npcGroup.forEach(function(npc) {
+                npc.setDepth(npc.y + 11);
+                if (time > npc.nextAction) {
+                    npc.nextAction = time + 3000 + Math.random() * 5000;
+                    if (Math.random() > 0.35) {
+                        var tr = npc.townRect;
+                        var tx = tr.x + Math.random() * tr.w, ty = tr.y + Math.random() * tr.h;
+                        var dx = tx - npc.x, dy = ty - npc.y;
+                        var d = Math.sqrt(dx*dx + dy*dy);
+                        if (d > 5) {
+                            npc.setVelocity((dx/d)*npc.moveSpeed, (dy/d)*npc.moveSpeed);
+                            if (Math.abs(dx) > Math.abs(dy)) {
+                                npc.play(dx < 0 ? 'rabbit-walk-left' : 'rabbit-walk-right', true);
+                            } else {
+                                npc.play(dy < 0 ? 'rabbit-walk-up' : 'rabbit-walk-down', true);
+                            }
+                        }
+                    } else { npc.setVelocity(0, 0); npc.play('rabbit-idle', true); }
+                }
+                var tr = npc.townRect;
+                npc.x = Phaser.Math.Clamp(npc.x, tr.x, tr.x + tr.w);
+                npc.y = Phaser.Math.Clamp(npc.y, tr.y, tr.y + tr.h);
+            });
+        }
+
+        // --- Crop growth ---
+        if (scene.cropSprites) {
+            var now = Date.now();
+            scene.cropSprites.forEach(function(crop) {
+                if (crop.growthStage < crop.maxStage && now > crop.nextGrowth) {
+                    crop.growthStage++;
+                    crop.setFrame(crop.baseFrame + crop.growthStage);
+                    crop.nextGrowth = now + 10000 + Math.random() * 5000;
+                }
+            });
+        }
+
+        // --- Chicken AI ---
+        // Chickens stay inside the pen rectangle
+        var cr = scene.chickenRect;
+        scene.chickenGroup.forEach(function(chk) {
+            chk.setDepth(chk.y + 167);
+
+            // Soft boundary: gently steer back if near edge (no hard teleport)
+            var margin = 7;
+            var softZone = {
+                x: cr.x + margin, y: cr.y + margin,
+                w: cr.w - margin * 2, h: cr.h - margin * 2
+            };
+            var steerX = 0, steerY = 0;
+            if (chk.x < softZone.x) steerX = chk.moveSpeed * 0.5;
+            else if (chk.x > softZone.x + softZone.w) steerX = -chk.moveSpeed * 0.5;
+            if (chk.y < softZone.y) steerY = chk.moveSpeed * 0.5;
+            else if (chk.y > softZone.y + softZone.h) steerY = -chk.moveSpeed * 0.5;
+
+            // Hard clamp: never escape pen entirely
+            chk.x = Phaser.Math.Clamp(chk.x, cr.x, cr.x + cr.w);
+            chk.y = Phaser.Math.Clamp(chk.y, cr.y, cr.y + cr.h);
+
+            if (steerX !== 0 || steerY !== 0) {
+                chk.setVelocity(steerX, steerY);
+                chk.play('chick-walk', true);
+                if (steerX !== 0) chk.setFlipX(steerX < 0);
+                chk.nextAction = time + 1500;
+            } else if (time > chk.nextAction) {
+                var action = Math.random() > 0.4 ? 'walk' : 'idle';
+                var duration = 2500 + Math.random() * 3000;
+                chk.nextAction = time + duration;
+                if (action === 'walk') {
+                    // Random target inside soft zone
+                    var targetX = softZone.x + Math.random() * softZone.w;
+                    var targetY = softZone.y + Math.random() * softZone.h;
+                    var tdx = targetX - chk.x;
+                    var tdy = targetY - chk.y;
+                    var td = Math.sqrt(tdx*tdx + tdy*tdy);
+                    if (td > 5) {
+                        chk.setVelocity((tdx/td) * chk.moveSpeed, (tdy/td) * chk.moveSpeed);
+                    }
+                    chk.play('chick-walk', true);
+                    chk.setFlipX(chk.body.velocity.x < 0);
+                } else {
+                    chk.setVelocity(0, 0);
+                    chk.play('chick-idle', true);
+                }
+            }
+        });
+    }
+
+    function updateAnimalAI(scene, animal, name, time) {
+        if (!animal) return;
+        var s = animal.sprite;
+
+        s.setDepth(s.y + 11);
+        if (animal.label) {
+            animal.label.setPosition(s.x, s.y - 8);
+            animal.label.setDepth(99998);
+        }
+
+        if (time > animal.nextMove) {
+            animal.nextMove = time + 2000 + Math.random() * 3000;
+            if (Math.random() > 0.3) {
+                var angle = Math.random() * Math.PI * 2;
+                var dist = Math.random() * animal.roamRadius;
+                animal.targetX = animal.homeX + Math.cos(angle) * dist;
+                animal.targetY = animal.homeY + Math.sin(angle) * dist;
+                animal.state = 'walk';
+            } else {
+                animal.state = 'idle';
+                s.setVelocity(0, 0);
+                if (name === 'cookie') s.play('cookie-idle', true);
+                else if (name === 'mumu') s.play('mumu-idle', true);
+                else if (name === 'heihei') s.play('heihei-idle', true);
+                else if (name === 'huahua') s.play('huahua-idle', true);
+                else if (name === 'ark') s.play('ark-idle-down', true);
+            }
+        }
+
+        if (animal.state === 'walk') {
+            var dx = animal.targetX - s.x;
+            var dy = animal.targetY - s.y;
+            var dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist > 3) {
+                var spd = animal.speed * 60;
+                var nx = (dx / dist) * spd;
+                var ny = (dy / dist) * spd;
+                s.setVelocity(nx, ny);
+
+                if (name === 'cookie') {
+                    if (Math.abs(dx) > Math.abs(dy)) s.play(dx < 0 ? 'cookie-left' : 'cookie-right', true);
+                    else s.play(dy < 0 ? 'cookie-up' : 'cookie-down', true);
+                } else if (name === 'mumu') {
+                    if (Math.abs(dx) > Math.abs(dy)) s.play(dx < 0 ? 'mumu-left' : 'mumu-right', true);
+                    else s.play(dy < 0 ? 'mumu-up' : 'mumu-down', true);
+                } else if (name === 'heihei') {
+                    s.play('heihei-walk', true); s.setFlipX(dx < 0);
+                } else if (name === 'huahua') {
+                    s.play('huahua-walk', true); s.setFlipX(dx < 0);
+                } else if (name === 'ark') {
+                    if (Math.abs(dx) > Math.abs(dy)) s.play(dx < 0 ? 'ark-walk-left' : 'ark-walk-right', true);
+                    else s.play(dy < 0 ? 'ark-walk-up' : 'ark-walk-down', true);
+                }
+            } else {
+                animal.state = 'idle';
+                s.setVelocity(0, 0);
+            }
+        }
+    }
+
+    // === WEBSOCKET ===
+    // === EVENT LOG ===
+    var eventMessages = [
+        '阿克亲了小玉一下 💋', '小玉锤了阿克三下 💢', '阿克喷墨了 🐙💦',
+        'Cookie捡到了一根骨头 🦴', '花花在晒太阳 ☀️', '小鸡下了一个蛋 🥚',
+        '黑黑在追自己的尾巴 🐱', 'Cookie在打盹 💤', '阿克偷偷看了小玉一眼 👀',
+        '小玉的尾巴摇了摇 🦊', '花花和黑黑在抢鱼干 🐟', '木木在发呆 💭',
+        '阿克给小玉带了小鱼干 🐙🐟', 'Cookie在追蝴蝶 🦋', '小鸡在叽叽喳喳 🐤'
+    ];
+    function addEvent(text) {
+        var log = document.getElementById('event-log');
+        if (!log) return;
+        var line = document.createElement('div');
+        line.className = 'event-line';
+        line.textContent = text;
+        log.appendChild(line);
+        while (log.children.length > 5) log.removeChild(log.children[0]);
+    }
+    setInterval(function() {
+        addEvent(eventMessages[Math.floor(Math.random() * eventMessages.length)]);
+    }, 10000 + Math.random() * 10000);
+    var gameSeason = 0, gameDay = 1;
+    var seasons = ['🌸 Spring', '☀️ Summer', '🍂 Autumn', '❄️ Winter'];
+    setInterval(function() {
+        gameSeason = (gameSeason + 1) % 4;
+        if (gameSeason === 0) gameDay++;
+        var el = document.getElementById('hud-season');
+        if (el) el.textContent = seasons[gameSeason];
+        var dayEl = document.getElementById('hud-day');
+        if (dayEl) dayEl.textContent = 'Day ' + gameDay;
+    }, 60000);
+    setTimeout(function() { addEvent('小玉来到了暖爪小窝 🦊✨'); }, 1000);
+
+    // === CAMERA CONTROLS ===
+    var cameraDragMode = false;
+    var dragStart = null;
+
+    function cameraZoom(dir) {
+        var cam = game.scene.scenes[0].cameras.main;
+        // Smooth zoom: multiply instead of add, smaller step
+        var factor = dir > 0 ? 1.08 : 0.92;
+        var z = cam.zoom * factor;
+        cam.setZoom(Phaser.Math.Clamp(z, 1, 8));
+    }
+
+    function cameraReset() {
+        var scene0 = game.scene.scenes[0];
+        var cam = scene0.cameras.main;
+        cam.setZoom(CAMERA_ZOOM);
+        cam.startFollow(scene0.player, true, 0.05, 0.05);
+        cameraDragMode = false;
+        document.getElementById('drag-toggle').style.background = 'rgba(0,0,0,0.6)';
+    }
+
+    function toggleDrag() {
+        cameraDragMode = !cameraDragMode;
+        var scene0 = game.scene.scenes[0];
+        var cam = scene0.cameras.main;
+        var btn = document.getElementById('drag-toggle');
+        if (cameraDragMode) {
+            cam.stopFollow();
+            btn.style.background = 'rgba(255,165,0,0.7)';
+        } else {
+            cam.startFollow(scene0.player, true, 0.05, 0.05);
+            btn.style.background = 'rgba(0,0,0,0.6)';
+        }
+    }
+
+    // === MUTE TOGGLE ===
+    var gameMuted = false;
+    function toggleMute() {
+        gameMuted = !gameMuted;
+        var scene0 = game.scene.scenes[0];
+        if (scene0) scene0.sound.mute = gameMuted;
+        document.getElementById('mute-toggle').textContent = gameMuted ? '🔇' : '🔊';
+    }
+
+    // Mouse wheel zoom
+    document.getElementById('game-container').addEventListener('wheel', function(e) {
+        if (indoorActive) return;
+        e.preventDefault();
+        cameraZoom(e.deltaY < 0 ? 1 : -1);
+    }, { passive: false });
+
+    // Drag to pan
+    document.getElementById('game-container').addEventListener('pointerdown', function(e) {
+        if (!cameraDragMode || indoorActive) return;
+        dragStart = { x: e.clientX, y: e.clientY, scrollX: game.scene.scenes[0].cameras.main.scrollX, scrollY: game.scene.scenes[0].cameras.main.scrollY };
+    });
+    document.getElementById('game-container').addEventListener('pointermove', function(e) {
+        if (!dragStart || !cameraDragMode) return;
+        var cam = game.scene.scenes[0].cameras.main;
+        cam.scrollX = dragStart.scrollX - (e.clientX - dragStart.x) / cam.zoom;
+        cam.scrollY = dragStart.scrollY - (e.clientY - dragStart.y) / cam.zoom;
+    });
+    document.addEventListener('pointerup', function() { dragStart = null; });
+
+    function connectWS() {
+        try {
+            ws = new WebSocket('ws://127.0.0.1:8080/ws');
+            ws.onopen = function() { document.getElementById('stat-conn').textContent = 'Online'; };
+            ws.onmessage = function(e) {
+                try {
+                    var gs = JSON.parse(e.data);
+                    if (gs.season) {
+                        document.getElementById('stat-season').textContent = gs.season + ' Day ' + (gs.day || 1);
+                    }
+                } catch(err) {}
+            };
+            ws.onclose = function() {
+                document.getElementById('stat-conn').textContent = 'Offline';
+                setTimeout(connectWS, 30000); // reconnect every 30s instead of 3s
+            };
+            ws.onerror = function() {};
+        } catch(e) {}
+    }
+
+    </script>
+</body>
+</html>

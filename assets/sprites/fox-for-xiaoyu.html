@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>给小玉的小狐狸 🦊</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: linear-gradient(135deg, #fef0f5 0%, #fff5e6 50%, #fef0f5 100%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Georgia', serif;
+    overflow: hidden;
+  }
+
+  .scene {
+    position: relative;
+    width: 400px;
+    height: 500px;
+  }
+
+  /* Stars twinkling */
+  .stars {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+  .star {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: #ffb6c1;
+    border-radius: 50%;
+    animation: twinkle 2s ease-in-out infinite;
+  }
+  .star:nth-child(1) { top: 5%; left: 10%; animation-delay: 0s; }
+  .star:nth-child(2) { top: 15%; left: 85%; animation-delay: 0.5s; }
+  .star:nth-child(3) { top: 8%; left: 50%; animation-delay: 1s; }
+  .star:nth-child(4) { top: 25%; left: 20%; animation-delay: 1.5s; }
+  .star:nth-child(5) { top: 12%; left: 70%; animation-delay: 0.3s; }
+  .star:nth-child(6) { top: 30%; left: 90%; animation-delay: 0.8s; }
+  .star:nth-child(7) { top: 3%; left: 35%; animation-delay: 1.2s; }
+  .star:nth-child(8) { top: 20%; left: 5%; animation-delay: 0.6s; }
+
+  @keyframes twinkle {
+    0%, 100% { opacity: 0.3; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.5); }
+  }
+
+  /* Fox container */
+  .fox {
+    position: absolute;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    animation: float 3s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateX(-50%) translateY(0); }
+    50% { transform: translateX(-50%) translateY(-10px); }
+  }
+
+  /* SVG Fox */
+  .fox svg {
+    width: 280px;
+    height: 320px;
+    filter: drop-shadow(0 10px 20px rgba(255, 150, 100, 0.2));
+  }
+
+  /* Tail wag */
+  .tail {
+    transform-origin: 85px 220px;
+    animation: wag 1.5s ease-in-out infinite;
+  }
+  @keyframes wag {
+    0%, 100% { transform: rotate(-5deg); }
+    50% { transform: rotate(10deg); }
+  }
+
+  /* Blink */
+  .eye-open { animation: blink 4s ease-in-out infinite; }
+  @keyframes blink {
+    0%, 42%, 46%, 100% { opacity: 1; }
+    44% { opacity: 0; }
+  }
+  .eye-closed { animation: blink-line 4s ease-in-out infinite; }
+  @keyframes blink-line {
+    0%, 42%, 46%, 100% { opacity: 0; }
+    44% { opacity: 1; }
+  }
+
+  /* Blush pulse */
+  .blush {
+    animation: blush-pulse 3s ease-in-out infinite;
+  }
+  @keyframes blush-pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.7; }
+  }
+
+  /* Heart floating */
+  .hearts {
+    position: absolute;
+    bottom: 200px;
+    left: 50%;
+  }
+  .heart {
+    position: absolute;
+    font-size: 18px;
+    animation: heart-float 3s ease-in-out infinite;
+    opacity: 0;
+  }
+  .heart:nth-child(1) { left: 80px; animation-delay: 0s; }
+  .heart:nth-child(2) { left: 100px; animation-delay: 1s; }
+  .heart:nth-child(3) { left: -100px; animation-delay: 0.5s; }
+  .heart:nth-child(4) { left: -80px; animation-delay: 1.5s; }
+
+  @keyframes heart-float {
+    0% { opacity: 0; transform: translateY(0) scale(0.5); }
+    20% { opacity: 0.8; }
+    100% { opacity: 0; transform: translateY(-120px) scale(1.2); }
+  }
+
+  /* Message */
+  .message {
+    position: absolute;
+    bottom: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #e88a7a;
+    font-size: 16px;
+    letter-spacing: 2px;
+    white-space: nowrap;
+    animation: fade-in 2s ease-in forwards;
+    opacity: 0;
+    animation-delay: 0.5s;
+  }
+  @keyframes fade-in {
+    to { opacity: 1; }
+  }
+
+  /* Ground shadow */
+  .shadow {
+    position: absolute;
+    bottom: 45px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 160px;
+    height: 15px;
+    background: radial-gradient(ellipse, rgba(255,150,100,0.15) 0%, transparent 70%);
+    animation: shadow-pulse 3s ease-in-out infinite;
+  }
+  @keyframes shadow-pulse {
+    0%, 100% { transform: translateX(-50%) scale(1); }
+    50% { transform: translateX(-50%) scale(0.9); }
+  }
+
+  /* Little flowers on ground */
+  .flower {
+    position: absolute;
+    bottom: 35px;
+    font-size: 14px;
+    opacity: 0.6;
+  }
+  .flower:nth-child(1) { left: 40px; }
+  .flower:nth-child(2) { left: 100px; bottom: 40px; font-size: 10px; }
+  .flower:nth-child(3) { right: 40px; }
+  .flower:nth-child(4) { right: 90px; bottom: 42px; font-size: 11px; }
+</style>
+</head>
+<body>
+  <div class="scene">
+    <!-- Twinkling stars -->
+    <div class="stars">
+      <div class="star"></div>
+      <div class="star"></div>
+      <div class="star"></div>
+      <div class="star"></div>
+      <div class="star"></div>
+      <div class="star"></div>
+      <div class="star"></div>
+      <div class="star"></div>
+    </div>
+
+    <!-- Floating hearts -->
+    <div class="hearts">
+      <div class="heart">💕</div>
+      <div class="heart">💗</div>
+      <div class="heart">💕</div>
+      <div class="heart">💗</div>
+    </div>
+
+    <!-- Fox -->
+    <div class="fox">
+      <svg viewBox="0 0 280 320" xmlns="http://www.w3.org/2000/svg">
+        <!-- Tail -->
+        <g class="tail">
+          <path d="M200,230 Q260,200 270,160 Q275,140 260,135 Q245,132 240,150 Q230,180 190,220"
+                fill="#FF9B5E" />
+          <path d="M260,160 Q265,145 255,140 Q248,138 245,150 Q238,175 210,210"
+                fill="#FFF5EB" />
+        </g>
+
+        <!-- Body -->
+        <ellipse cx="140" cy="240" rx="70" ry="55" fill="#FF9B5E" />
+        <!-- Belly -->
+        <ellipse cx="140" cy="250" rx="45" ry="40" fill="#FFF5EB" />
+
+        <!-- Left ear -->
+        <path d="M90,95 L70,30 L120,75" fill="#FF9B5E" />
+        <path d="M93,90 L78,42 L115,78" fill="#FFB88A" />
+        <path d="M85,75 L78,50 L100,72" fill="#FFC4C4" />
+
+        <!-- Right ear -->
+        <path d="M190,95 L210,30 L160,75" fill="#FF9B5E" />
+        <path d="M187,90 L202,42 L165,78" fill="#FFB88A" />
+        <path d="M195,75 L202,50 L180,72" fill="#FFC4C4" />
+
+        <!-- Head -->
+        <ellipse cx="140" cy="120" rx="65" ry="55" fill="#FF9B5E" />
+
+        <!-- Face white area -->
+        <path d="M140,80 Q100,100 105,140 Q110,165 140,170 Q170,165 175,140 Q180,100 140,80"
+              fill="#FFF5EB" />
+
+        <!-- Eyes - open -->
+        <g class="eye-open">
+          <ellipse cx="118" cy="115" rx="8" ry="9" fill="#4A3728" />
+          <ellipse cx="162" cy="115" rx="8" ry="9" fill="#4A3728" />
+          <!-- Eye shine -->
+          <circle cx="121" cy="112" r="3" fill="white" />
+          <circle cx="165" cy="112" r="3" fill="white" />
+          <circle cx="116" cy="117" r="1.5" fill="white" />
+          <circle cx="160" cy="117" r="1.5" fill="white" />
+        </g>
+
+        <!-- Eyes - closed (for blink) -->
+        <g class="eye-closed">
+          <path d="M110,115 Q118,120 126,115" stroke="#4A3728" stroke-width="2.5" fill="none" stroke-linecap="round" />
+          <path d="M154,115 Q162,120 170,115" stroke="#4A3728" stroke-width="2.5" fill="none" stroke-linecap="round" />
+        </g>
+
+        <!-- Blush -->
+        <ellipse class="blush" cx="100" cy="130" rx="12" ry="7" fill="#FFB5B5" opacity="0.5" />
+        <ellipse class="blush" cx="180" cy="130" rx="12" ry="7" fill="#FFB5B5" opacity="0.5" />
+
+        <!-- Nose -->
+        <ellipse cx="140" cy="138" rx="6" ry="4.5" fill="#4A3728" />
+        <!-- Nose shine -->
+        <ellipse cx="141.5" cy="136.5" rx="2" ry="1.2" fill="#7A6558" opacity="0.5" />
+
+        <!-- Mouth -->
+        <path d="M134,145 Q140,152 146,145" stroke="#4A3728" stroke-width="1.8" fill="none" stroke-linecap="round" />
+
+        <!-- Whiskers -->
+        <line x1="75" y1="128" x2="105" y2="133" stroke="#FFD4AA" stroke-width="1" opacity="0.6" />
+        <line x1="75" y1="138" x2="105" y2="138" stroke="#FFD4AA" stroke-width="1" opacity="0.6" />
+        <line x1="175" y1="133" x2="205" y2="128" stroke="#FFD4AA" stroke-width="1" opacity="0.6" />
+        <line x1="175" y1="138" x2="205" y2="138" stroke="#FFD4AA" stroke-width="1" opacity="0.6" />
+
+        <!-- Front paws -->
+        <ellipse cx="110" cy="280" rx="18" ry="12" fill="#FF9B5E" />
+        <ellipse cx="170" cy="280" rx="18" ry="12" fill="#FF9B5E" />
+        <ellipse cx="110" cy="282" rx="12" ry="7" fill="#FFF5EB" />
+        <ellipse cx="170" cy="282" rx="12" ry="7" fill="#FFF5EB" />
+
+        <!-- Paw beans -->
+        <circle cx="105" cy="281" r="2.5" fill="#FFB5B5" opacity="0.6" />
+        <circle cx="112" cy="279" r="2.5" fill="#FFB5B5" opacity="0.6" />
+        <circle cx="119" cy="281" r="2.5" fill="#FFB5B5" opacity="0.6" />
+        <circle cx="165" cy="281" r="2.5" fill="#FFB5B5" opacity="0.6" />
+        <circle cx="172" cy="279" r="2.5" fill="#FFB5B5" opacity="0.6" />
+        <circle cx="179" cy="281" r="2.5" fill="#FFB5B5" opacity="0.6" />
+      </svg>
+    </div>
+
+    <!-- Ground shadow -->
+    <div class="shadow"></div>
+
+    <!-- Little flowers -->
+    <div class="flower">✿</div>
+    <div class="flower">❀</div>
+    <div class="flower">✿</div>
+    <div class="flower">❀</div>
+
+    <!-- Message -->
+    <div class="message">克克的小狐狸 ♡</div>
+  </div>
+</body>
+</html>
